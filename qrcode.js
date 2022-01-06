@@ -1208,7 +1208,7 @@ var QRCode;
         return Drawing;
     })() : (function () { // Drawing in Canvas
         function _onMakeImage() {
-            this._elImage.src = this._elCanvas.toDataURL("image / png");
+            this._elImage.src = this._elCanvas.toDataURL("image/png");
             this._elImage.style.display = "block";
             this._elCanvas.style.display = "none";            
         }
@@ -1267,7 +1267,7 @@ var QRCode;
                 el.onabort = fOnError;
                 el.onerror = fOnError;
                 el.onload = fOnSuccess;
-                el.src = "data:image / gif; base64, iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8 / w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg == "; // the Image contains 1px data.
+                el.src = "data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="; // the Image contains 1px data.
                 return;
             } else if (self._bSupportDataURI === true && self._fSuccess) {
                 self._fSuccess.call(self);
@@ -1468,7 +1468,6 @@ var QRCode;
      */
     QRCode.prototype.makeCode = function (sText) {
         this._oQRCode = new QRMatrix(sText, this._htOption.correctLevel);
-        this._oQRCode.setColorScheme({ec: {dark:"#00ff00"}})
         this._oQRCode.make();
         this._el.title = sText;
         this._oDrawing.draw(this._oQRCode);            
