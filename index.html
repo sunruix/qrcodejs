@@ -1,60 +1,29 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko" lang="ko">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-cn" lang="zh-cn">
 <head>
     <title>Cross-Browser QRCode generator for Javascript</title>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
     <script type="text/javascript" src="jquery.min.js"></script>
     <script type="text/javascript" src="qrcode.js"></script>
-    <script type="text/javascript" src="new.js"></script>
 </head>
 <body>
-    <!-- <input id="text" type="text" value="http://jindo.dev.naver.com/collie" style="width:80%" /><br /> -->
-    <input id="text" type="text" value='德国古典音乐' style="width:80%" /><br />
-    <!-- <input id="text" type="text" value='ajksdhflkajsproiqwuepriqwe0-r9q8-we8r-9qw8erqweiriqwe0utuiytiu8787098ghgkjhhg' style="width:80%" /><br /> -->
+    <input id="text" type="text" autofocus value='https://www.qrcode.com/en/index.html' style="width:50%; height:20px; font-size:large ;" /><br />
+    <label for="ecLevel">容错 Error Correction</label>
+    <select id="ecLevel">
+        <option value=0>7%</option>
+        <option value=1>15%</option>
+        <option value=2>25%</option>
+        <option value=3>30%</option>
+    </select>
     <div id="qrcode" style="width:400px; height:400px; margin: 30px 5%;"></div>
-    <div>
-        <label for="name">姓名</label>
-    <input id="name" type="text">
-    </div>
-    <div>
-        <label for="tel">电话</label>
-        <input id="tel" type="tel">
-    </div>
-    <div>
-        <label for="identityType">证件类型</label>
-        <select id="identityType">
-            <option value="身份证">身份证</option>
-            <option value="军官证">军官证</option>
-            <option value="其他证件">其他证件</option>
-        </select>
-    </div>
-    <div>
-        <label for="idcard">证件号</label>
-        <input id="idcard" type="text">
-    </div>
-    <div>
-        <label for="gender">性别</label>
-        <select id="sex">
-            <option value=1>男</option>
-            <option value=0>女</option>
-        </select>
-    </div>
-    <div>
-        <label for="birthday">出生日期</label>
-        <input id="birthday" type="date">
-    </div>
-    <div>
-        <label for="address">住址</label>
-        <input id="address" type="text">
-    </div>
-    <input type="button" onclick="getInfo()" value="submit">
 
     <script type="text/javascript">
         var ele = document.getElementById("qrcode");
         var qrcode = new QRCode(ele, {
             width : parseInt(ele.style.width),
-            height : parseInt(ele.style.height)
+            height : parseInt(ele.style.height),
+            correctLevel: parseInt(document.getElementById("ecLevel").value)
         });
 
         function makeCode () {        
@@ -77,26 +46,7 @@
             on("keydown", function (e) {
                 if (e.keyCode == 13) {
                     makeCode();
-                    data = new QRData(document.getElementById("text").value);
-                    console.log(data);
                 }
             });
-        function getInfo() {
-            var o = {};
-            o.name = document.getElementById("name").value;
-            o.tel = document.getElementById("tel").value;
-            o.identityType = document.getElementById("identityType").value;
-            o.idcard = document.getElementById("idcard").value;
-            o.sex = document.getElementById("sex").value;
-            o.gender = o.sex ? "男性" : "女性";
-            o.birthday = document.getElementById("birthday").value;
-            var now = new Date();
-            o.age = now.getFullYear() - parseInt(o.birthday);
-            o.address = document.getElementById("address").value;
-            console.log(JSON.stringify(o));
-            console.log(typeof(o.birthday));
-            window.alert(encoder.encode(JSON.stringify(o)).length);
-            qrcode.makeCode(JSON.stringify(o));
-        }
     </script>
 </body>

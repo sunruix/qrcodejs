@@ -1,33 +1,25 @@
 /**
  * @fileoverview
- * - Using the 'QRCode for Javascript library'
- * - Fixed dataset of 'QRCode for Javascript library' for support full-spec.
- * - this library has no dependencies.
  * 
- * @author davidshimjs
- * @see <a href="http://www.d-project.com/" target="_blank">http://www.d-project.com/</a>
- * @see <a href="http://jeromeetienne.github.com/jquery-qrcode/" target="_blank">http://jeromeetienne.github.com/jquery-qrcode/</a>
+ * @author sunrui {@link https://github.com/sunruix/qrcode.js|github repo}.
+ * 
+ * - Refactor the qrcodejs {@link https://github.com/davidshimjs/qrcodejs|github repo}.
+ * 
+ * - Support 3 encoding modes(numeric, alphanum, 8bytes).
+ * 
+ * The word "QR Code" is registered trademark of DENSO WAVE INCORPERATED
+ * {@link https://www.qrcode.com/en/index.html|QR Code official website}
+ * 
+ * Refer to
+ * {@link https://www.swisseduc.ch/informatik/theoretische_informatik/qr_codes/docs/qr_standard.pdf|ISO Documnet}
+ * for specifications.
  */
 var QRCode;
 
 (function () {
-    //---------------------------------------------------------------------
-    // QRCode for JavaScript
-    //
-    // Copyright (c) 2009 Kazuhiko Arase
-    //
-    // URL: http://www.d-project.com/
-    //
-    // Licensed under the MIT license:
-    //   http://www.opensource.org/licenses/mit-license.php
-    //
-    // The word "QR Code" is registered trademark of 
-    // DENSO WAVE INCORPORATED
-    //   http://www.denso-wave.com/qrcode/faqpatent-e.html
-    //
-    //---------------------------------------------------------------------
-    //https://www.swisseduc.ch/informatik/theoretische_informatik/qr_codes/docs/qr_standard.pdf
-
+    /**
+     * Encoding mode id, also the index of indicator array.
+     */
     var QRMode = {
         MODE_NUMBER: 0,
         MODE_ALPHA_NUM: 1,
@@ -37,16 +29,30 @@ var QRCode;
         MODE_ECI: 5,
         MODE_FNC1: 6
     };
+    /**
+     * Encoding mode indicator, 4 bits(except FNC1 mode 8 bits).
+     */
     var QRModeIndicator = [0x1, 0x2, 0x4, 0x8, 0x3, 0x7, 0x35];
+    /**
+     * Bits number of character count indicator. Only 4 modes are showed in the document.
+     */
     var QRBitsNumberOfCharacterCountIndicator = [
         [10, 9, 8, 8],          // version 1 ~ 9, mode: number, alphanum, byte, kanji
         [12, 11, 16, 10],       // version 10 ~ 26
         [14, 13, 16, 12]        // version 27 ~ 40
     ];
-    var QRErrorCorrectionLevel = {L : 1, M : 0, Q : 3, H : 2};
-    var QRErrorCorrectionLevelIndex = [1, 0, 3, 2]; // <-[QRErrorCorrectionLevel.M] == 1
-    var QRMaskPattern = {PATTERN000 : 0, PATTERN001 : 1, PATTERN010 : 2, PATTERN011 : 3, PATTERN100 : 4, PATTERN101 : 5, PATTERN110 : 6, PATTERN111 : 7};
-    var DataCapcity = [
+    /**
+     * Error correction level.
+     */
+    var QRErrorCorrectionLevel = {L : 0, M : 1, Q : 2, H : 3};
+    /**
+     * Error correction level indicater, part of format infomation.
+     */
+    var QRErrCorrectionLevelIndicator = [0x1, 0x0, 0x3, 0x2];
+    /**
+     * Character capacity of a matrix with viarant encoding mode, version(size), and error correction level.
+     */
+    var QRDataCapcity = [
                             [[], // numeric mode
                                 [41, 34, 27, 17],
                                 [77, 63, 48, 34],
@@ -212,7 +218,10 @@ var QRCode;
                                 [1729, 1362, 972, 750],
                                 [1817, 1435, 1024, 784]]
     ];
-    var QRCodewordsCount = [[],      // Number of data codewords. version as row, error correction level(L, M, Q, H) as col
+    /**
+     * Number of data codewords. Version as row, error correction level(L, M, Q, H) as column.
+     */
+    var QRCodewordsCount = [[],
             [19, 16, 13, 9],
             [34, 28, 22, 16],
             [55, 44, 34, 26],
@@ -254,7 +263,14 @@ var QRCode;
             [2812, 2216, 1582, 1222],
             [2956, 2334, 1666, 1276],
     ];
+    /**
+     * Two pad codewords for filling the data capacity.
+     */
     var QRPad = [0xEC, 0x11];
+    /**
+     * Split the data codewords into blocks then generate error correction code words separately.
+     * This table stores the partition info.
+     */
     var QRRSBlockTable = [ [1, 26, 19],
                     [1, 26, 16],
                     [1, 26, 13],
@@ -415,6 +431,9 @@ var QRCode;
                     [18, 75, 47, 31, 76, 48],
                     [34, 54, 24, 34, 55, 25],
                     [20, 45, 15, 61, 46, 16]];
+    /**
+     * Positions to put the alignment pattern.
+     */
     var QRAlignmentPatternLocationTable = [[],
                     [],
                     [6, 18],
@@ -456,14 +475,20 @@ var QRCode;
                     [6, 32, 58, 84, 110, 136, 162],
                     [6, 26, 54, 82, 110, 138, 166],
                     [6, 30, 58, 86, 114, 142, 170]];
+    /**
+     * Specifications for generate format bits.
+     */
     var QRFormatEC = {
-        gp: 0x537,         // 101 0011 0111
-        mask: 0x5412,      // 101 0100 0001 0010
-        len: 10
+        gp: 0x537,          // BCH generator polynomial, 101 0011 0111
+        mask: 0x5412,       // 101 0100 0001 0010
+        len: 10             // length of BCH error correction bits.
     }
+    /**
+     * Specifications for generate version bits.
+     */
     var QRVersionEC = {
-        gp: 0x1f25,        // 1 1111 0010 0101
-        len: 12
+        gp: 0x1f25,         // BCH generator polynomila, 1 1111 0010 0101
+        len: 12             // length of BCH error correction bits.
     }
     var QRMask = [
         function(i, j) { return ((i + j) & 1) == 0; },    // (i + j) mod 2 = 0
@@ -474,10 +499,18 @@ var QRCode;
         function(i, j) { return i * j % 6 == 0 },       // (ij) mod 2 + (ij) mod 3 = 0
         function(i, j) { var k=i*j; return (((k & 1) + (k % 3)) & 1) == 0; },       // ((ij) mod 2 + (ij) mod 3) mod 2 = 0
         function(i, j) { return ((((i + j) & 1) + ((i * j) % 3)) & 1) == 0; },       // ((i+j) mod 2 + (ij) mod 3) mod 2 = 0
-        function(i, j) { return false; }
     ]
+    /**
+     * Calculate a penalty score.
+     * @param {Array} matrix - The QR matrix
+     * @param {number} size - Size of the matrix. Not necessary.
+     * @returns Total penalty score.
+     */
     function QRMaskPenalty(matrix, size) {
-        function condition1() {             // Adjacent modules in row/column in same color. 3 points each pattern.
+        /**
+         * Adjacent modules in row/column in same color. 3 points each pattern.
+         */
+        function condition1() {
             var i, j, k, score = 0;
             for (i = 0; i < size; ++i) {
                 for (j = 0; j < size; j += k) {
@@ -491,7 +524,10 @@ var QRCode;
             }
             return score;
         }
-        function condition2() {             // Block of modules in same color. 3 points per 4x4 square.
+        /**
+         * Block of modules in same color. 3 points per 4x4 square.
+         */
+        function condition2() {
             var score = 0;
             for (let i = 0; i + 1 < size; ++i) {
                 for (let j = 0; j + 1 < size; ++j) {
@@ -503,38 +539,34 @@ var QRCode;
                 }
             }
             return score;
-        } 
-        function condition3() {             // 1:1:3:1:1 ratio(dark:light:dark:light:dark). 40 points each pattern.
+        }
+        /**
+         * Pattern 1:1:3:1:1 ratio (dark:light:dark:light:dark). 40 points each pattern.
+         */
+        function condition3() {
             var score = 0;
+            var mode = 0x5d // 1011101
             for (let i = 0; i < size; ++i) {
                 for (let j = 0; j + 6 < size; ++j) {
-                    if ((matrix[i][j] & 1) == 1 &&
-                            (matrix[i][j + 1] & 1) == 0 &&
-                            (matrix[i][j + 2] & 1) == 1 &&
-                            (matrix[i][j + 3] & 1) == 1 &&
-                            (matrix[i][j + 4] & 1) == 1 &&
-                            (matrix[i][j + 5] & 1) == 0 &&
-                            (matrix[i][j + 6] & 1) == 1) {
-                        score += 40;
+                    var mc = 0, mr = 0;
+                    for (let k = 0; k < 7; ++k) {
+                        mc += (matrix[i][j + k] & 1) << k;
+                        mr += (matrix[j + k][i] & 1) << k;
                     }
-                    if ((matrix[j][i] & 1) == 1 &&
-                            (matrix[j + 1][i] & 1) == 0 &&
-                            (matrix[j + 2][i] & 1) == 1 &&
-                            (matrix[j + 3][i] & 1) == 1 &&
-                            (matrix[j + 4][i] & 1) == 1 &&
-                            (matrix[j + 5][i] & 1) == 0 &&
-                            (matrix[j + 6][i] & 1) == 1) {
-                        score += 40;
-                    }
+                    if (mc == mode) { score += 40; }
+                    if (mr == mode) { score += 40; }
                 }
             }
             return score;
         }
-        function condition4() {          // Propotion of dark modules. Ratio points 10 every 5%.
+        /**
+         * Propotion of dark modules. Ratio points 10 every 5% from 50%.
+         */
+        function condition4() {
             var darkCount = 0;
             for (let i = 0; i < size; ++i) {
                 for (let j = 0; j < size; ++j) {
-                    if (matrix[i][j] & 1 == 1) {
+                    if ((matrix[i][j] & 1) == 1) {
                         darkCount += 1;
                     }
                 }
@@ -542,17 +574,22 @@ var QRCode;
             var r = Math.floor(100 * darkCount / (size * size));
             return Math.floor(Math.abs(r - 50) / 5) * 10;
         }
-        // var a, b, c, d;
-        a = condition1(); b = condition2(); c = condition3(); d = condition4();
-        // console.log(a, b, c, d);
-        return a + b + c + d;
-        // return condition1() + condition2() + condition3() + condition4();
+        return condition1() + condition2() + condition3() + condition4();
     }
+    /**
+     * An object helping encode.
+     * @param {number} count - number of data codewords
+     */
     function QREncodeTool(count) {
         this.words = new Uint8Array(count);
         this.bitsCount = 0;
     }
     QREncodeTool.prototype = {
+        /**
+         * Push a bit stream into the buffer.
+         * @param {number} code     - bit stream.
+         * @param {number} length   - length of bit stream
+         */
         push: function(code, length) {
             var wordIndex = this.bitsCount >> 3;
             var bitIndex = this.bitsCount & 0x7;    // index inside codeword
@@ -565,15 +602,20 @@ var QRCode;
             }
             this.words[wordIndex] |= (code << (8 - bitIndex - length));
         },
+        /**
+         * Fill the buffer with pad.
+         */
         fill: function() {
-            var wordIndex = (this.bitsCount >> 3) + (this.bitsCount & 0x7 ? 1 : 0) + 0;
+            var wordIndex = (this.bitsCount >> 3) + (this.bitsCount & 0x7 ? 1 : 0);
             var i = 1;
             while (wordIndex < this.words.length) {
                 this.words[wordIndex++] = QRPad[i ^= 1];
             }
         }
     }
-
+    /**
+     * A Galios Field GF(2^8) for generating error correction codewords.
+     */
     var gf256 = new function () {
         this.POLY_DEC = new Uint8Array(256);
         this.LOG = new Uint8Array(256);
@@ -591,8 +633,11 @@ var QRCode;
         for (let i = 0; i < 255; ++i) {
             this.LOG[this.POLY_DEC[i]] = i;
         }
-        console.log(this.LOG);
     }
+    /**
+     * Polynomial operations for error correction.
+     * Coefficients are stored in an Uint8Array whose indices are treated as exponents.
+     */
     var PolynomialOperation = {
         add : function(p1, p2) {
             var p = new Uint8Array(p1.length > p2.length ? p1.length : p2.length);
@@ -613,13 +658,20 @@ var QRCode;
         divide : function(p1, p2) {
             var p = p1.slice(p1.length - p2.length, p1.length);
             for (let i = p1.length - p2.length - 1; i >= 0; --i) {
-                coef = gf256.log(p[p.length - 1]);
-                for (let j = p.length - 1; j > 0; --j) {
-                    p[j] = p[j - 1] ^ gf256.poly(gf256.log(p2[j - 1]) + coef);
+                if (p[p.length - 1] == 0) {
+                    for (let j = p.length - 1; j > 0; --j) {
+                        p[j] = p[j - 1];
+                    }
+                } else {
+                    coef = gf256.log(p[p.length - 1]);
+                    for (let j = p.length - 1; j > 0; --j) {
+                        p[j] = p[j - 1] ^ gf256.poly(gf256.log(p2[j - 1]) + coef);
+                    }
                 }
                 p[0] = p1[i];
             }
             coef = gf256.log(p[p.length - 1]);
+            // if (p[p.length - 1] == 0) console.log('error', p);
             for (let j = p.length - 1; j > 0; --j) {
                 p[j] = p[j - 1] ^ gf256.poly(gf256.log(p2[j - 1]) + coef);
             }
@@ -633,6 +685,11 @@ var QRCode;
             return np;
         }
     }
+    /**
+     * Create generator polynomial for error correction.
+     * @param {number} n - Number of error correction codeword.
+     * @returns An Uint8Array as generator polynomial, indices as exponents.
+     */
     function GeneratorPolynomial(n) {
         var p1 = new Uint8Array([1, 1]);
         for (i = 2; i <= n; ++i) {
@@ -641,24 +698,42 @@ var QRCode;
         }
         return p;
     }
-    function determineMode(str) {
+    /**
+     * Choose the fit encoding mode.
+     * @param {string} str - The message text.
+     * @returns Mode number in object QRMode.
+     */
+    function chooseMode(str) {
         var otherThanNum = new RegExp('[^0-9]');
         var otherThanAlphanum =  new RegExp('[^0-9A-Z $%+*/.:-]');
         return otherThanNum.test(str) ? (otherThanAlphanum.test(str) ? QRMode.MODE_8BIT_BYTE : QRMode.MODE_ALPHA_NUM) : QRMode.MODE_NUMBER;
     }
-    function minVersion(str, mode, ecLevel) {
-        var capaTable = DataCapcity[mode];
+    /**
+     * Choose the minimum version can hold the data.
+     * @param {string} str - The message text.
+     * @param {QRMode} mode - The mode number.
+     * @param {QRErrorCorrectionLevel} ecLevel - The error correction level number
+     * @returns The minmum version number that can hold the data.
+     */
+    function chooseVersion(str, mode, ecLevel) {
+        var capaTable = QRDataCapcity[mode];
         var charCount = mode == QRMode.MODE_8BIT_BYTE ? ((new TextEncoder()).encode(str)).length : str.length;
-        for (var version = 1, j = QRErrorCorrectionLevelIndex[ecLevel];
-                version < capaTable.length && capaTable[version][j] < charCount;
-                ++version);
+        for (var version = 1; version < capaTable.length && capaTable[version][ecLevel] < charCount; ++version);
         if (version >= capaTable.length) {
             throw new Error("Too long data, " + textLength + " bytes");
         }
         return version;
     }
-    function encodeRaw(str, mode, version, ecLevel) {
-        var encodeTool = new QREncodeTool(QRCodewordsCount[version][QRErrorCorrectionLevelIndex[ecLevel]]);
+    /**
+     * Encode the data codewords.
+     * @param {string} str - The message text.
+     * @param {QRMode} mode - Encoding mode.
+     * @param {number} version - Version number.
+     * @param {QRErrorCorrectionLevel} ecLevel - Error correction level.
+     * @returns The data codewords.
+     */
+    function encodeData(str, mode, version, ecLevel) {
+        var encodeTool = new QREncodeTool(QRCodewordsCount[version][ecLevel]);
         encodeTool.push(QRModeIndicator[mode], 4);
         if (mode == QRMode.MODE_8BIT_BYTE) {
             str = (new TextEncoder()).encode(str);
@@ -684,31 +759,34 @@ var QRCode;
                 encodeTool.push(str[i], 8);
             }
         }
-        encodeTool.push(0, 4);
+        encodeTool.push(0, 4);  // the terminator 0000, indicates the end of data codewords.
         encodeTool.fill();
         return encodeTool.words;
     }
-    function constructFinalMessage(str, mode, version, ecLevel) {
-        var codewords = encodeRaw(str, mode, version, ecLevel);
+    /**
+     * Generate the codewords(bit stream).
+     * @param {string} str - The message text.
+     * @param {QRMode} mode - Encoding mode number.
+     * @param {number} version - Version, actually the matrix size.
+     * @param {QRErrorCorrectionLevel} ecLevel - A number represent the error correction level.
+     * @returns Codewords consisted of data codewords and error correction codewords.
+     */
+    function generateCodewords(str, mode, version, ecLevel) {
+        var codewords = encodeData(str, mode, version, ecLevel);
         var dataList = new Array();
         var ecList = new Array();
-        var partition = QRRSBlockTable[(version - 1) * 4 + QRErrorCorrectionLevelIndex[ecLevel]];
+        var split = QRRSBlockTable[(version - 1) * 4 + ecLevel];
         var dataAnchor = 0;
-        for (let i = 0; i < partition.length; i += 3) {
-            var n = partition[i + 1], m = partition[i + 2];
+        for (let i = 0; i < split.length; i += 3) {
+            var n = split[i + 1], m = split[i + 2];
             var gp = GeneratorPolynomial(n - m);
-            for (let j = 0; j < partition[i]; ++j) {
+            for (let j = 0; j < split[i]; ++j) {
                 var data = new Uint8Array(m);
                 for (let k = 0; k < m; ++k) {
                     data[k] = codewords[dataAnchor + k];
                 }
                 data.reverse();
                 var ec = PolynomialOperation.divide(PolynomialOperation.shift(data, n - m), gp)
-                function x(n) {
-                    return gf256.log(n);
-                }
-                console.log(ec.map(x));
-                console.log(ec);
                 data.reverse();
                 ec.reverse();
                 dataList.push(data);
@@ -716,27 +794,34 @@ var QRCode;
                 dataAnchor += m;
             }
         }
-        var dataLength = partition.length > 3 ? (partition[2] > partition[5] ? partition[2] : partition[5]) : partition[2];
-        var ecLength = partition.length > 3 ? (partition[1] - partition[2] > partition[4] - partition[5] ? partition[1] - partition[2] : partition[4] - partition[5]) : partition[1] - partition[2];
-        var cw = new Uint8Array(partition[0] * partition[1] + (partition.length > 3 ? partition[3] * partition[4] : 0));
+        var dataLength = split.length > 3 ? (split[2] > split[5] ? split[2] : split[5]) : split[2];
+        var ecLength = split.length > 3 ? (split[1] - split[2] > split[4] - split[5] ? split[1] - split[2] : split[4] - split[5]) : split[1] - split[2];
+        var cw = new Uint8Array(split[0] * split[1] + (split.length > 3 ? split[3] * split[4] : 0));
         var index = 0;
-        console.log(partition);
-        console.log(cw.length);
         for (let j = 0; j < dataLength; ++j) {
             for (let i = 0; i < dataList.length; ++i) {
-                if (dataList[i][j] != undefined) cw[index++] = dataList[i][j];
+                if (dataList[i][j] != undefined) {
+                    cw[index++] = dataList[i][j];
+                }
             }
         }
-        console.log(index);
         for (let j = 0; j < ecLength; ++j) {
             for (let i = 0; i < ecList.length; ++i) {
-                if (ecList[i][j] != undefined) cw[index++] = ecList[i][j];
+                if (ecList[i][j] != undefined) {
+                    cw[index++] = ecList[i][j];
+                }
             }
         }
-        console.log(index);
         return cw;
     }
-    function SimpleRS(bits, gp, ecLen) {
+    /**
+     * Calculate the error correction bits using BCH code.
+     * @param {number} bits     - original code
+     * @param {number} gp       - generator polynomial
+     * @param {number} ecLen    - length of the error correction code
+     * @returns 
+     */
+    function BCHBits(bits, gp, ecLen) {
         if (bits != 0) {
             var bitsLen = function(n) { var len = 0; while (n >> ++len); return n == 0 ? 0 : len; }
             var rem = bits << ecLen;
@@ -755,48 +840,91 @@ var QRCode;
         }
     }
 
+    /**
+     * @class QRMatrix
+     * @constructor
+     * @param {string} data - The message text.
+     * @param {QRErrorCorrectionLevel} errorCorrectionLevel - Error correction level, a property of object QRErrorCorrection Level.
+     */
     function QRMatrix(data, errorCorrectionLevel) {
-        this.mode = determineMode(data);
+        this.mode = chooseMode(data);
         this.ecLevel = errorCorrectionLevel;
-        this.version = minVersion(data, this.mode, this.ecLevel);
-        this.codewords = constructFinalMessage(data, this.mode, this.version, this.ecLevel);
-        this.modules = null;
-        this.moduleCount = 0;
+        this.version = chooseVersion(data, this.mode, this.ecLevel);
+        this.codewords = generateCodewords(data, this.mode, this.version, this.ecLevel);
+        this.matrix = null;
+        this.size = 0;
+        this.colorScheme = {
+            data: {
+                dark: '#000000',
+                light: '#ffffff'
+            },
+            ec: {
+                dark: '#000000',
+                light: '#ffffff'
+            },
+            other: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
+        }
     }
 
     QRMatrix.prototype = {
         isDark: function(row, col) {
-            if (row < 0 || this.moduleCount <= row || col < 0 || this.moduleCount <= col) {
+            if (row < 0 || this.size <= row || col < 0 || this.size <= col) {
                 throw new Error(row + "," + col);
             }
-            return this.modules[row][col] & 1 == 1;
+            return (this.matrix[row][col] & 1) == 1;
         },
-        getModuleCount: function() {
-            return this.moduleCount;
+        moduleColor: function(i, j) {
+            var region = this.matrix[i][j] < 0 ? 'other' : this.matrix[i][j] > 2 ? 'ec' : 'data';
+            return this.matrix[i][j] & 1 ? this.colorScheme[region].dark : this.colorScheme[region].light;
+        },
+        getSize: function() {
+            return this.size;
+        },
+        getDataCodewordsCount: function() {
+            var split = QRRSBlockTable[(this.version - 1) * 4 + this.ecLevel];
+            return split[0] * split[2] + (split.length > 3 ? split[3] * split[5] : 0);
         },
         init: function() {
-            this.moduleCount = this.version * 4 + 17;
-            this.modules = new Array(this.moduleCount);
-            for (var row = 0; row < this.moduleCount; ++row) {      // (1, 2) denotes (dark, light) for data, (-1, -2) for others
-                this.modules[row] = new Int8Array(this.moduleCount);
+            this.size = this.version * 4 + 17;
+            this.matrix = new Array(this.size);
+            for (var row = 0; row < this.size; ++row) {
+                this.matrix[row] = new Int8Array(this.size);
+            }
+        },
+        /**
+         * To color different region with different color.
+         * It may facilitate debugging and impoved appearance. I hope so.
+         * @param {Object} scheme - Rendering color for the module.
+         */
+        setColorScheme: function(scheme) {
+            for (let region in scheme) {
+                if (scheme[region].dark) this.colorScheme[region].dark = scheme[region].dark;
+                if (scheme[region].light) this.colorScheme[region].light = scheme[region].light;
             }
         },
         placeFunctionPatterns: function() {
             this.placePositionDetectionPatterns();
             this.placeAlignmentPattern();
             this.placeTimingPattern();
-            this.modules[this.moduleCount - 8][8] = -1;   // so called "dark module"
+            this.matrix[this.size - 8][8] = -1;   // so called "dark module"
         },
         isDataRegion: function(i, j) {
-            return this.modules[i][j] >= 0;
+            return this.matrix[i][j] >= 0;
         },
+        /**
+         * Find valid position for codewords.
+         * @returns True if find a valid position, False if out of border.
+         */
         crawl: function() {
             while (true) {
                 this.pos.i += this.step.i;
                 this.pos.j += this.step.j;
-                if (this.pos.i == this.moduleCount || this.pos.i < 0) {
+                if (this.pos.i == this.size || this.pos.i < 0) {
                     this.step.dir = this.step.dir == 'u' ? 'd' : 'u';
-                    this.pos.i = this.pos.i < 0 ? 0 : this.moduleCount - 1;
+                    this.pos.i = this.pos.i < 0 ? 0 : this.size - 1;
                     this.pos.j -= 2;
                     if (this.pos.j == 6) {      // jump over the vertical timing pattern
                         this.pos.j = 5;
@@ -807,58 +935,57 @@ var QRCode;
                 if (this.isDataRegion(this.pos.i, this.pos.j)) {
                     return true;
                 }
-                if (this.pos.i < 0 || this.pos.i == this.moduleCount ||
-                    this.pos.j < 0 || this.pos.j == this.moduleCount) {
+                if (this.pos.i < 0 || this.pos.i == this.size ||
+                    this.pos.j < 0 || this.pos.j == this.size) {
                         return false;
                 }
             }
         },
         placeData: function(mask) {
             this.step = {dir: 'u', i: 0, j: -1};
-            this.pos = {i: this.moduleCount - 1, j: this.moduleCount - 1};
+            this.pos = {i: this.size - 1, j: this.size - 1};
+            var dataCount = this.getDataCodewordsCount();
             for (let i = 0; i < this.codewords.length; ++i) {
                 for (let j = 7; j >= 0; --j) {
                     var dark = ((this.codewords[i] >> j) & 1) == 1 ? 1 : 2;
                     if (mask(this.pos.i, this.pos.j)) {
                         dark = dark == 1 ? 2 : 1;
                     }
-                    this.modules[this.pos.i][this.pos.j] = dark;
+                    if (i >= dataCount) {
+                        dark = dark == 1 ? 3 : 4;
+                    }
+                    this.matrix[this.pos.i][this.pos.j] = dark;
                     this.crawl();
                 }
             }
-            
             do {
-                this.modules[this.pos.i][this.pos.j] = mask(this.pos.i, this.pos.j) ? 1 : 2;
+                this.matrix[this.pos.i][this.pos.j] = mask(this.pos.i, this.pos.j) ? 1 : 2;
             } while (this.crawl());
         },
-        bestMask: function() {
+        chooseMask: function() {
             var min = 0x7fffffff;
-            var score;
-            var maskPattern = 0;
+            var bestMask = 0;
             for (let i = 0; i < 8; ++i) {
-                this.placeFormat(i);
+                this.placeFormatInformation(i);
                 this.placeData(QRMask[i]);
-                score = QRMaskPenalty(this.modules, this.moduleCount);
+                var score = QRMaskPenalty(this.matrix, this.size);
                 if (score < min) {
                     min = score;
-                    maskPattern = i;
+                    bestMask = i;
                 }
             }
-            return maskPattern;
+            return bestMask;
         },
         make: function() {
             this.init();
             this.placeFunctionPatterns();
             this.placeVersionInformation();
-            var maskPattern = this.bestMask();
-            maskPattern = 0;
-            // console.log(maskPattern);
-            this.placeFormat(maskPattern);
+            var maskPattern = this.chooseMask();
+            this.placeFormatInformation(maskPattern);
             this.placeData(QRMask[maskPattern]);
-            // this.placeData();
         },
         placePositionDetectionPatterns: function() {
-            var pos = [{row: 0, col: 0}, {row: this.moduleCount - 7, col: 0}, {row: 0, col: this.moduleCount - 7}];
+            var pos = [{row: 0, col: 0}, {row: this.size - 7, col: 0}, {row: 0, col: this.size - 7}];
             function paint(x, y, size, value, matrix) {
                 for (let i = x; i < x + size; ++i) {
                     for (let j = y; j < y + size; ++j) {
@@ -868,16 +995,16 @@ var QRCode;
             }
             for (let i = 0; i < 3; ++i) {
                 var row = pos[i].row, col = pos[i].col;
-                paint((row > 0 ? row - 1 : row), (col > 0 ? col - 1 : col), 8, -2, this.modules);
-                paint(row, col, 7, -1, this.modules);
-                paint(row + 1, col + 1, 5, -2, this.modules);
-                paint(row + 2, col + 2, 3, -1, this.modules);
+                paint((row > 0 ? row - 1 : row), (col > 0 ? col - 1 : col), 8, -2, this.matrix);
+                paint(row, col, 7, -1, this.matrix);
+                paint(row + 1, col + 1, 5, -2, this.matrix);
+                paint(row + 2, col + 2, 3, -1, this.matrix);
             }
         },
         placeTimingPattern: function() {
-            for (var i = 8; i < this.moduleCount - 8; ++i) {
-                if (this.modules[i][6] == 0) {
-                    this.modules[i][6] = this.modules[6][i] = (i & 1 ? -2 : -1);
+            for (var i = 8; i < this.size - 8; ++i) {
+                if (this.matrix[i][6] == 0) {
+                    this.matrix[i][6] = this.matrix[6][i] = (i & 1 ? -2 : -1);
                 }
             }
         },
@@ -887,48 +1014,50 @@ var QRCode;
                 for (var j = 0; j < pos.length; j++) {
                     var row = pos[i];
                     var col = pos[j];
-                    if (this.modules[row][col] != 0) {
+                    if (this.matrix[row][col] != 0) {
                         continue;
                     }
                     for (var r = -2; r <= 2; r++) {
                         for (var c = -2; c <= 2; c++) {
                             if (r == -2 || r == 2 || c == -2 || c == 2 || (r == 0 && c == 0)) {
-                                this.modules[row + r][col + c] = -1;
+                                this.matrix[row + r][col + c] = -1;
                             } else {
-                                this.modules[row + r][col + c] = -2;
+                                this.matrix[row + r][col + c] = -2;
                             }
                         }
                     }
                 }
             }
         },
+        /**
+         * The regions for version information is actually symmetric.
+         */
         placeVersionInformation: function() {
             if (this.version < 7) return;
-            var bits = this.version << QRVersionEC.len | SimpleRS(this.version, QRVersionEC.gp, QRVersionEC.len);
+            var bits = this.version << QRVersionEC.len | BCHBits(this.version, QRVersionEC.gp, QRVersionEC.len);
             for (let i = 0; i < 6; ++i) {
-                for (let j = this.moduleCount - 11; j < this.moduleCount - 9; ++j) {
-                    this.modules[i][j] = (bits & 1) ? -1 : -2;
-                    this.modules[j][i] = (bits & 1) ? -1 : -2;
+                for (let j = this.size - 11; j <= this.size - 9; ++j) {
+                    this.matrix[i][j] = (bits & 1) ? -1 : -2;
+                    this.matrix[j][i] = (bits & 1) ? -1 : -2;
                     bits >>= 1;
                 }
             }
         },
-        placeFormat: function(maskPattern) {
-            var bits = this.ecLevel << 3 | maskPattern;
-            bits = ((bits << QRFormatEC.len) | SimpleRS(bits, QRFormatEC.gp, QRFormatEC.len)) ^ QRFormatEC.mask;
-            // console.log(this.ecLevel, maskPattern, bits.toString(16));
+        placeFormatInformation: function(maskPattern) {
+            var bits = QRErrCorrectionLevelIndicator[this.ecLevel] << 3 | maskPattern;
+            bits = ((bits << QRFormatEC.len) | BCHBits(bits, QRFormatEC.gp, QRFormatEC.len)) ^ QRFormatEC.mask;
             var getBit = function(n) { return ((bits >> QRFormatEC.len + 5 - n - 1) & 1) == 1 ? -1 : -2; }
             for (let j = 0; j < 6; ++j) {
-                this.modules[8][j] = getBit(j);
-                this.modules[j][8] = getBit(14 - j);
+                this.matrix[8][j] = getBit(j);
+                this.matrix[j][8] = getBit(14 - j);
             }
             for (let i = 0; i < 7; ++i) {
-                this.modules[this.moduleCount - 1 - i][8] = getBit(i);
-                this.modules[8][this.moduleCount - 1 - i] = getBit(14 - i);
+                this.matrix[this.size - 1 - i][8] = getBit(i);
+                this.matrix[8][this.size - 1 - i] = getBit(14 - i);
             }
-            this.modules[8][8] = this.modules[8][this.moduleCount - 8] = getBit(7);
-            this.modules[7][8] = getBit(8);
-            this.modules[8][7] = getBit(6);
+            this.matrix[8][8] = this.matrix[8][this.size - 8] = getBit(7);
+            this.matrix[7][8] = getBit(8);
+            this.matrix[8][7] = getBit(6);
         },
     };
     
@@ -963,21 +1092,21 @@ var QRCode;
         Drawing.prototype.draw = function (oQRCode) {
             var _htOption = this._htOption;
             var _el = this._el;
-            var nCount = oQRCode.getModuleCount();
+            var nCount = oQRCode.getSize();
             var nWidth = Math.floor(_htOption.width / nCount);
             var nHeight = Math.floor(_htOption.height / nCount);
 
             this.clear();
 
             function makeSVG(tag, attrs) {
-                var el = document.createElementNS('http://www.w3.org / 2000 / svg', tag);
+                var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
                 for (var k in attrs)
                     if (attrs.hasOwnProperty(k)) el.setAttribute(k, attrs[k]);
                 return el;
             }
 
             var svg = makeSVG("svg" , {'viewBox': '0 0 ' + String(nCount) + " " + String(nCount), 'width': '100%', 'height': '100%', 'fill': _htOption.colorLight});
-            svg.setAttributeNS("http://www.w3.org / 2000 / xmlns/", "xmlns:xlink", "http://www.w3.org / 1999 / xlink");
+            svg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", "http://www.w3.org/1999/xlink");
             _el.appendChild(svg);
 
             svg.appendChild(makeSVG("rect", {"fill": _htOption.colorLight, "width": "100%", "height": "100%"}));
@@ -987,7 +1116,7 @@ var QRCode;
                 for (var col = 0; col < nCount; col++) {
                     if (oQRCode.isDark(row, col)) {
                         var child = makeSVG("use", {"x": String(col), "y": String(row)});
-                        child.setAttributeNS("http://www.w3.org / 1999 / xlink", "href", "#template")
+                        child.setAttributeNS("http://www.w3.org/1999/xlink", "href", "#template")
                         svg.appendChild(child);
                     }
                 }
@@ -1002,6 +1131,30 @@ var QRCode;
 
     var useSVG = document.documentElement.tagName.toLowerCase() === "svg";
 
+    var tagPrinter = function(upperElement, options) {
+        this.upperElement = upperElement;
+        this.options = options;
+    }
+    tagPrinter.prototype = {
+        print: function(matrix) {
+            var size = matrix.getSize();
+            var cellHeight = Math.floor(options.height / size);
+            var cellWidth = Math.floor(options.width / size);
+            var tableElement = ['<table style = "border:0; border-collapse:collapse;">'];
+            for (let i = 0; i < size; ++i) {
+                tableElement.push('<tr>');
+                for (let j = 0; j < size; ++j) {
+                    tableElement.push('<td style = "border:0; border-collapse:collapse; padding:0; margin:0; width:' + cellWidth + 'px; height:' + cellHeight + 'px; background-color:' + matrix.moduleColor(row, col) + ';"></td>');
+                }
+                tableElement.push('</tr>');
+            }
+            tableElement.push('</table>');
+            this.upperElement.innerHTML = tableElement.join('');
+        },
+        clear: function() {
+            this.upperElement.innerHTML = '';
+        }
+    }
     // Drawing in DOM by using Table tag
     var Drawing = useSVG ? svgDrawer : !_isSupportCanvas() ? (function () {
         var Drawing = function (el, htOption) {
@@ -1017,7 +1170,7 @@ var QRCode;
         Drawing.prototype.draw = function (oQRCode) {
             var _htOption = this._htOption;
             var _el = this._el;
-            var nCount = oQRCode.getModuleCount();
+            var nCount = oQRCode.getSize();
             var nWidth = Math.floor(_htOption.width / nCount);
             var nHeight = Math.floor(_htOption.height / nCount);
             var aHTML = ['<table style = "border:0; border - collapse:collapse;">'];
@@ -1026,7 +1179,7 @@ var QRCode;
                 aHTML.push('<tr>');
                 
                 for (var col = 0; col < nCount; col++) {
-                    aHTML.push('<td style = "border:0; border - collapse:collapse; padding:0; margin:0; width:' + nWidth + 'px; height:' + nHeight + 'px; background - color:' + (oQRCode.isDark(row, col) ? _htOption.colorDark : _htOption.colorLight) + ';"></td>');
+                    aHTML.push('<td style = "border:0; border - collapse:collapse; padding:0; margin:0; width:' + nWidth + 'px; height:' + nHeight + 'px; background - color:' + oQRCode.moduleColor(row, col) + ';"></td>');
                 }
                 
                 aHTML.push('</tr>');
@@ -1127,10 +1280,10 @@ var QRCode;
          * Drawing QRCode by using canvas
          * 
          * @constructor
-         * @param {HTMLElement} el
+         * @param {HTMLElement} element
          * @param {Object} htOption QRCode Options 
          */
-        var Drawing = function (el, htOption) {
+        var Drawing = function (element, htOption) {
             this._bIsPainted = false;
             this._android = _getAndroid();
         
@@ -1138,8 +1291,8 @@ var QRCode;
             this._elCanvas = document.createElement("canvas");
             this._elCanvas.width = htOption.width;
             this._elCanvas.height = htOption.height;
-            el.appendChild(this._elCanvas);
-            this._el = el;
+            element.appendChild(this._elCanvas);
+            this._el = element;
             this._oContext = this._elCanvas.getContext("2d");
             this._bIsPainted = false;
             this._elImage = document.createElement("img");
@@ -1159,7 +1312,7 @@ var QRCode;
             var _oContext = this._oContext;
             var _htOption = this._htOption;
             
-            var nCount = oQRCode.getModuleCount();
+            var nCount = oQRCode.getSize();
             var nWidth = _htOption.width / nCount;
             var nHeight = _htOption.height / nCount;
             var nRoundedWidth = Math.round(nWidth);
@@ -1170,12 +1323,11 @@ var QRCode;
             
             for (var row = 0; row < nCount; row++) {
                 for (var col = 0; col < nCount; col++) {
-                    var bIsDark = oQRCode.isDark(row, col);
                     var nLeft = col * nWidth;
                     var nTop = row * nHeight;
-                    _oContext.strokeStyle = bIsDark ? _htOption.colorDark : _htOption.colorLight;
+                    _oContext.strokeStyle = oQRCode.moduleColor(row, col);
                     _oContext.lineWidth = 1;
-                    _oContext.fillStyle = bIsDark ? _htOption.colorDark : _htOption.colorLight;                    
+                    _oContext.fillStyle = oQRCode.moduleColor(row, col);
                     _oContext.fillRect(nLeft, nTop, nWidth, nHeight);
                     
                     // 안티 앨리어싱 방지 처리
@@ -1243,11 +1395,11 @@ var QRCode;
      * @class QRCode
      * @constructor
      * @example 
-     * new QRCode(document.getElementById("test"), "http://jindo.dev.naver.com / collie");
+     * new QRCode(document.getElementById("test"), "https://www.qrcode.com/en/index.html");
      *
      * @example
      * var oQRCode = new QRCode("test", {
-     *    text : "http://naver.com",
+     *    text : "https://www.qrcode.com/en/index.html",
      *    width : 128,
      *    height : 128
      * });
@@ -1271,8 +1423,11 @@ var QRCode;
             typeNumber : 4,
             colorDark : "#000000",
             colorLight : "#ffffff",
+            colorScheme : {
+
+            },
             // correctLevel : QRErrorCorrectionLevel.H
-            correctLevel : QRErrorCorrectionLevel.H
+            correctLevel : QRErrorCorrectionLevel.Q
         };
         
         if (typeof vOption === 'string') {
@@ -1313,6 +1468,7 @@ var QRCode;
      */
     QRCode.prototype.makeCode = function (sText) {
         this._oQRCode = new QRMatrix(sText, this._htOption.correctLevel);
+        this._oQRCode.setColorScheme({ec: {dark:"#00ff00"}})
         this._oQRCode.make();
         this._el.title = sText;
         this._oDrawing.draw(this._oQRCode);            

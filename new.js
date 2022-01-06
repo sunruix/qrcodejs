@@ -552,10 +552,40 @@ blockStatus = function(version, ecLevel) {
         }
     }
 }
+function SimpleRS(bits, gp, ecLen) {
+    if (bits != 0) {
+        var bitsLen = function(n) { var len = 0; while (n >> ++len); return n == 0 ? 0 : len; }
+        var rem = bits << ecLen;
+        var len = bitsLen(bits) + ecLen;
+        gp <<= len - bitsLen(gp);
+        while (len > ecLen) {
+            rem ^= gp;
+            while (rem >> (len - 1) == 0) {
+                gp >>= 1;
+                len -= 1;
+            }
+        }
+        return (bits << ecLen | rem);
+    } else {
+        return 0;
+    }
+}
+function test() {
+    for (l in QRErrorCorrectionLevel) {
+        for (let i = 0; i < 8; ++i) {
+            var lBits = QRErrorCorrectionLevel[l];
+            console.log(lBits, i, (SimpleRS(lBits << 3 | i, 0x537, 10) ^ 0x5412).toString(16));
+        }
+    }
+    for (let v = 7; v < 41; ++v) {
+        //1 1111 0010 0101
+        console.log(v, SimpleRS(v, 0x1f25, 12).toString(16));
+    }
+}
 // gp = new GeneratorPolynomial(128);
 cw = new Uint8Array([32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17]);
 cw.reverse();
 cw = PolynomialOperation.shift(cw, 10);
-console.log(PolynomialOperation.divide(cw, GeneratorPolynomial(10)));
-console.log(gf256.LOG);
-console.log(GeneratorPolynomial(10));
+// console.log(PolynomialOperation.divide(cw, GeneratorPolynomial(10)));
+// console.log(gf256.LOG);
+// console.log(GeneratorPolynomial(10));
