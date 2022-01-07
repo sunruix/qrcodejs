@@ -19,13 +19,7 @@
     <div id="qrcode" style="width:400px; height:400px; margin: 30px 5%;"></div>
 
     <script type="text/javascript">
-        var ele = document.getElementById("qrcode");
-        var qrcode = new QRCode(ele, {
-            width : parseInt(ele.style.width),
-            height : parseInt(ele.style.height),
-            correctLevel: parseInt(document.getElementById("ecLevel").value)
-        });
-
+        var qrcode = new QRCode(document.getElementById('qrcode'));
         function makeCode () {        
             var elText = document.getElementById("text");
             
@@ -34,7 +28,8 @@
                 elText.focus();
                 return;
             }
-            qrcode.makeCode(elText.value);
+            qrcode.makeCode(elText.value, parseInt(document.getElementById('ecLevel').value));
+            // qrcode.makeCode(elText.value, QRCode.ErrorCorrectionLevel.H);
         }
 
         makeCode();
