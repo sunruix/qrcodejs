@@ -853,21 +853,10 @@ var QRCode;
         this.codewords = generateCodewords(data, this.mode, this.version, this.ecLevel);
         this.matrix = null;
         this.size = 0;
-        this.colorScheme = {
-            data: {
-                dark: '#000000',
-                light: '#ffffff'
-            },
-            ec: {
-                dark: '#000000',
-                light: '#ffffff'
-            },
-            other: {
-                dark: '#000000',
-                light: '#ffffff'
-            }
-        }
     }
+    // Differentiate module types to facilitate dubuggin.
+    QRMatrix.moduleType = { data: 0, ec: 1, other: 2 };
+    QRMatrix.moduleValue = [{dark: 1, light: 2}, {dark: 3, light: 4}, {dark: -1, light: -2}];
 
     QRMatrix.prototype = {
         isDark: function(row, col) {
@@ -876,9 +865,11 @@ var QRCode;
             }
             return (this.matrix[row][col] & 1) == 1;
         },
-        moduleColor: function(i, j) {
-            var region = this.matrix[i][j] < 0 ? 'other' : this.matrix[i][j] > 2 ? 'ec' : 'data';
-            return this.matrix[i][j] & 1 ? this.colorScheme[region].dark : this.colorScheme[region].light;
+        getValue: function(row, col) {
+            if (row < 0 || this.size <= row || col < 0 || this.size <= col) {
+                throw new Error(row + "," + col);
+            }
+            return this.matrix[row][col];
         },
         getSize: function() {
             return this.size;
@@ -894,22 +885,11 @@ var QRCode;
                 this.matrix[row] = new Int8Array(this.size);
             }
         },
-        /**
-         * To color different region with different color.
-         * It may facilitate debugging and impoved appearance. I hope so.
-         * @param {Object} scheme - Rendering color for the module.
-         */
-        setColorScheme: function(scheme) {
-            for (let region in scheme) {
-                if (scheme[region].dark) this.colorScheme[region].dark = scheme[region].dark;
-                if (scheme[region].light) this.colorScheme[region].light = scheme[region].light;
-            }
-        },
         placeFunctionPatterns: function() {
             this.placePositionDetectionPatterns();
             this.placeAlignmentPattern();
             this.placeTimingPattern();
-            this.matrix[this.size - 8][8] = -1;   // so called "dark module"
+            this.matrix[this.size - 8][8] = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;   // so called "dark module"
         },
         isDataRegion: function(i, j) {
             return this.matrix[i][j] >= 0;
@@ -945,21 +925,30 @@ var QRCode;
             this.step = {dir: 'u', i: 0, j: -1};
             this.pos = {i: this.size - 1, j: this.size - 1};
             var dataCount = this.getDataCodewordsCount();
-            for (let i = 0; i < this.codewords.length; ++i) {
+            var dark = QRMatrix.moduleValue[QRMatrix.moduleType.data].dark;
+            var light = QRMatrix.moduleValue[QRMatrix.moduleType.data].light;
+            for (let i = 0; i < dataCount; ++i) {
                 for (let j = 7; j >= 0; --j) {
-                    var dark = ((this.codewords[i] >> j) & 1) == 1 ? 1 : 2;
-                    if (mask(this.pos.i, this.pos.j)) {
-                        dark = dark == 1 ? 2 : 1;
-                    }
-                    if (i >= dataCount) {
-                        dark = dark == 1 ? 3 : 4;
-                    }
-                    this.matrix[this.pos.i][this.pos.j] = dark;
+                    var v = ((this.codewords[i] >> j) & 1) == 1 ? dark : light;
+                    var ov = v == dark ? light : dark;
+                    this.matrix[this.pos.i][this.pos.j] = mask(this.pos.i, this.pos.j) ? ov : v;
                     this.crawl();
                 }
             }
+            dark = QRMatrix.moduleValue[QRMatrix.moduleType.ec].dark;
+            light = QRMatrix.moduleValue[QRMatrix.moduleType.ec].light;
+            for (let i = dataCount; i < this.codewords.length; ++i) {
+                for (let j = 7; j >= 0; --j) {
+                    var v = ((this.codewords[i] >> j) & 1) == 1 ? dark : light;
+                    var ov = v == dark ? light : dark;
+                    this.matrix[this.pos.i][this.pos.j] = mask(this.pos.i, this.pos.j) ? ov : v;
+                    this.crawl();
+                }
+            }
+            dark = QRMatrix.moduleValue[QRMatrix.moduleType.data].dark;
+            light = QRMatrix.moduleValue[QRMatrix.moduleType.data].light;
             do {
-                this.matrix[this.pos.i][this.pos.j] = mask(this.pos.i, this.pos.j) ? 1 : 2;
+                this.matrix[this.pos.i][this.pos.j] = mask(this.pos.i, this.pos.j) ? dark : light;
             } while (this.crawl());
         },
         chooseMask: function() {
@@ -995,34 +984,40 @@ var QRCode;
             }
             for (let i = 0; i < 3; ++i) {
                 var row = pos[i].row, col = pos[i].col;
-                paint((row > 0 ? row - 1 : row), (col > 0 ? col - 1 : col), 8, -2, this.matrix);
-                paint(row, col, 7, -1, this.matrix);
-                paint(row + 1, col + 1, 5, -2, this.matrix);
-                paint(row + 2, col + 2, 3, -1, this.matrix);
+                var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
+                var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
+                paint((row > 0 ? row - 1 : row), (col > 0 ? col - 1 : col), 8, light, this.matrix);
+                paint(row, col, 7, dark, this.matrix);
+                paint(row + 1, col + 1, 5, light, this.matrix);
+                paint(row + 2, col + 2, 3, dark, this.matrix);
             }
         },
         placeTimingPattern: function() {
+            var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
+            var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
             for (var i = 8; i < this.size - 8; ++i) {
                 if (this.matrix[i][6] == 0) {
-                    this.matrix[i][6] = this.matrix[6][i] = (i & 1 ? -2 : -1);
+                    this.matrix[i][6] = this.matrix[6][i] = (i & 1 ? light : dark);
                 }
             }
         },
         placeAlignmentPattern: function() {
-            var pos = QRAlignmentPatternLocationTable[this.version];
-            for (var i = 0; i < pos.length; i++) {
-                for (var j = 0; j < pos.length; j++) {
-                    var row = pos[i];
-                    var col = pos[j];
+            var posList = QRAlignmentPatternLocationTable[this.version];
+            var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
+            var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
+            for (var i = 0; i < posList.length; i++) {
+                for (var j = 0; j < posList.length; j++) {
+                    var row = posList[i];
+                    var col = posList[j];
                     if (this.matrix[row][col] != 0) {
                         continue;
                     }
                     for (var r = -2; r <= 2; r++) {
                         for (var c = -2; c <= 2; c++) {
                             if (r == -2 || r == 2 || c == -2 || c == 2 || (r == 0 && c == 0)) {
-                                this.matrix[row + r][col + c] = -1;
+                                this.matrix[row + r][col + c] = dark;
                             } else {
-                                this.matrix[row + r][col + c] = -2;
+                                this.matrix[row + r][col + c] = light;
                             }
                         }
                     }
@@ -1034,19 +1029,23 @@ var QRCode;
          */
         placeVersionInformation: function() {
             if (this.version < 7) return;
+            var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
+            var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
             var bits = this.version << QRVersionEC.len | BCHBits(this.version, QRVersionEC.gp, QRVersionEC.len);
             for (let i = 0; i < 6; ++i) {
                 for (let j = this.size - 11; j <= this.size - 9; ++j) {
-                    this.matrix[i][j] = (bits & 1) ? -1 : -2;
-                    this.matrix[j][i] = (bits & 1) ? -1 : -2;
+                    this.matrix[i][j] = (bits & 1) ? dark : light;
+                    this.matrix[j][i] = (bits & 1) ? dark : light;
                     bits >>= 1;
                 }
             }
         },
         placeFormatInformation: function(maskPattern) {
+            var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
+            var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
             var bits = QRErrCorrectionLevelIndicator[this.ecLevel] << 3 | maskPattern;
             bits = ((bits << QRFormatEC.len) | BCHBits(bits, QRFormatEC.gp, QRFormatEC.len)) ^ QRFormatEC.mask;
-            var getBit = function(n) { return ((bits >> QRFormatEC.len + 5 - n - 1) & 1) == 1 ? -1 : -2; }
+            var getBit = function(n) { return ((bits >> QRFormatEC.len + 5 - n - 1) & 1) == 1 ? dark : light; }
             for (let j = 0; j < 6; ++j) {
                 this.matrix[8][j] = getBit(j);
                 this.matrix[j][8] = getBit(14 - j);
@@ -1061,6 +1060,15 @@ var QRCode;
         },
     };
     
+    /**
+     * Printer objects set module color according to this list.
+     * QRCode object can change this list.
+     */
+    var colorScheme = new Map([
+        [QRMatrix.moduleValue[QRMatrix.moduleType.data].dark, '#000000'],[QRMatrix.moduleValue[QRMatrix.moduleType.data].light, '#ffffff'],
+        [QRMatrix.moduleValue[QRMatrix.moduleType.ec].dark, '#000000'],[QRMatrix.moduleValue[QRMatrix.moduleType.ec].light, '#ffffff'],
+        [QRMatrix.moduleValue[QRMatrix.moduleType.other].dark, '#000000'],[QRMatrix.moduleValue[QRMatrix.moduleType.other].light, '#ffffff'],
+    ])
     function _isSupportCanvas() {
         return typeof CanvasRenderingContext2D != "undefined";
     }
@@ -1140,16 +1148,22 @@ var QRCode;
             var size = matrix.getSize();
             var cellHeight = Math.floor(options.height / size);
             var cellWidth = Math.floor(options.width / size);
-            var tableElement = ['<table style = "border:0; border-collapse:collapse;">'];
+            var tableTag = ['<table style = "border:0; border-collapse:collapse;">'];
             for (let i = 0; i < size; ++i) {
-                tableElement.push('<tr>');
+                tableTag.push('<tr>');
                 for (let j = 0; j < size; ++j) {
-                    tableElement.push('<td style = "border:0; border-collapse:collapse; padding:0; margin:0; width:' + cellWidth + 'px; height:' + cellHeight + 'px; background-color:' + matrix.moduleColor(row, col) + ';"></td>');
+                    tableTag.push('<td style = "border:0; border-collapse:collapse; padding:0; margin:0; width:' + cellWidth + 'px; height:' + cellHeight + 'px; background-color:' + colorScheme.get(matrix.getValue(row, col)) + ';"></td>');
                 }
-                tableElement.push('</tr>');
+                tableTag.push('</tr>');
             }
-            tableElement.push('</table>');
-            this.upperElement.innerHTML = tableElement.join('');
+            tableTag.push('</table>');
+            this.upperElement.innerHTML = tableTag.join('');
+
+            // Put the table in the middle of the container.
+            var tableElement = this.upperElement.firstChild;
+            var marginTop = (this.options.height - tableElement.style.offsetHeight) / 2;
+            var marginLeft = (this.options.width - tableElement.style.offsetWidth) / 2;
+            tableElement.style.margin = marginTop + 'px' + ' ' + marginLeft + 'px';
         },
         clear: function() {
             this.upperElement.innerHTML = '';
@@ -1214,7 +1228,7 @@ var QRCode;
         }
         
         // Android 2.1 bug workaround
-        // http://code.google.com / p/android / issues / detail?id = 5141
+        // http://code.google.com/p/android/issues/detail?id = 5141
         if (this._android && this._android <= 2.1) {
             var factor = 1 / window.devicePixelRatio;
             var drawImage = CanvasRenderingContext2D.prototype.drawImage; 
@@ -1325,9 +1339,9 @@ var QRCode;
                 for (var col = 0; col < nCount; col++) {
                     var nLeft = col * nWidth;
                     var nTop = row * nHeight;
-                    _oContext.strokeStyle = oQRCode.moduleColor(row, col);
+                    _oContext.strokeStyle = colorScheme.get(oQRCode.getValue(row, col));
                     _oContext.lineWidth = 1;
-                    _oContext.fillStyle = oQRCode.moduleColor(row, col);
+                    _oContext.fillStyle = colorScheme.get(oQRCode.getValue(row, col));
                     _oContext.fillRect(nLeft, nTop, nWidth, nHeight);
                     
                     // 안티 앨리어싱 방지 처리
@@ -1423,9 +1437,6 @@ var QRCode;
             typeNumber : 4,
             colorDark : "#000000",
             colorLight : "#ffffff",
-            colorScheme : {
-
-            },
             // correctLevel : QRErrorCorrectionLevel.H
             correctLevel : QRErrorCorrectionLevel.Q
         };
