@@ -671,7 +671,6 @@ var QRCode;
                 p[0] = p1[i];
             }
             coef = gf256.log(p[p.length - 1]);
-            // if (p[p.length - 1] == 0) console.log('error', p);
             for (let j = p.length - 1; j > 0; --j) {
                 p[j] = p[j - 1] ^ gf256.poly(gf256.log(p2[j - 1]) + coef);
             }
@@ -851,14 +850,21 @@ var QRCode;
         this.ecLevel = errorCorrectionLevel;
         this.version = chooseVersion(data, this.mode, this.ecLevel);
         this.codewords = generateCodewords(data, this.mode, this.version, this.ecLevel);
-        this.matrix = null;
-        this.size = 0;
+        this.size = this.version * 4 + 17;
+        this.matrix = new Array(this.size);
+        for (var row = 0; row < this.size; ++row) {
+            this.matrix[row] = new Int8Array(this.size);
+        }
+        this.form();
     }
-    // Differentiate module types to facilitate dubuggin.
+    // Differentiate module types to facilitate dubugging.
     QRMatrix.moduleType = { data: 0, ec: 1, other: 2 };
     QRMatrix.moduleValue = [{dark: 1, light: 2}, {dark: 3, light: 4}, {dark: -1, light: -2}];
 
     QRMatrix.prototype = {
+        getMatrix: function() {
+            return this.matrix;
+        },
         isDark: function(row, col) {
             if (row < 0 || this.size <= row || col < 0 || this.size <= col) {
                 throw new Error(row + "," + col);
@@ -878,25 +884,24 @@ var QRCode;
             var split = QRRSBlockTable[(this.version - 1) * 4 + this.ecLevel];
             return split[0] * split[2] + (split.length > 3 ? split[3] * split[5] : 0);
         },
-        init: function() {
-            this.size = this.version * 4 + 17;
-            this.matrix = new Array(this.size);
-            for (var row = 0; row < this.size; ++row) {
-                this.matrix[row] = new Int8Array(this.size);
-            }
-        },
-        placeFunctionPatterns: function() {
-            this.placePositionDetectionPatterns();
-            this.placeAlignmentPattern();
-            this.placeTimingPattern();
+        setFunctionPatterns: function() {
+            this.setPositionDetectionPatterns();
+            this.setAlignmentPattern();
+            this.setTimingPattern();
             this.matrix[this.size - 8][8] = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;   // so called "dark module"
         },
+        /**
+         * 
+         * @param {number} i - row number
+         * @param {number} j - column number
+         * @returns True if matrix[i][j] is not negative, for the function pattern is already set and the values are -1, -2.
+         */
         isDataRegion: function(i, j) {
             return this.matrix[i][j] >= 0;
         },
         /**
          * Find valid position for codewords.
-         * @returns True if find a valid position, False if out of border.
+         * @returns True if find a valid position, False if out of range.
          */
         crawl: function() {
             while (true) {
@@ -921,8 +926,14 @@ var QRCode;
                 }
             }
         },
-        placeData: function(mask) {
+        /**
+         * Set values for data codewords including error correction codewords.
+         * @param {function} mask - The mask function.
+         */
+        setData: function(mask) {
+            // The next step.
             this.step = {dir: 'u', i: 0, j: -1};
+            // Current position.
             this.pos = {i: this.size - 1, j: this.size - 1};
             var dataCount = this.getDataCodewordsCount();
             var dark = QRMatrix.moduleValue[QRMatrix.moduleType.data].dark;
@@ -945,18 +956,21 @@ var QRCode;
                     this.crawl();
                 }
             }
-            dark = QRMatrix.moduleValue[QRMatrix.moduleType.data].dark;
-            light = QRMatrix.moduleValue[QRMatrix.moduleType.data].light;
+            // There may be some empty positions.
             do {
                 this.matrix[this.pos.i][this.pos.j] = mask(this.pos.i, this.pos.j) ? dark : light;
             } while (this.crawl());
         },
+        /**
+         * Choose a mask pattern that can make the figure more easy to identify.
+         * @returns - The mask pattern number 0-7.
+         */
         chooseMask: function() {
-            var min = 0x7fffffff;
+            var min = Number.MAX_SAFE_INTEGER;
             var bestMask = 0;
             for (let i = 0; i < 8; ++i) {
-                this.placeFormatInformation(i);
-                this.placeData(QRMask[i]);
+                this.setFormatInformation(i);
+                this.setData(QRMask[i]);
                 var score = QRMaskPenalty(this.matrix, this.size);
                 if (score < min) {
                     min = score;
@@ -965,15 +979,17 @@ var QRCode;
             }
             return bestMask;
         },
-        make: function() {
-            this.init();
-            this.placeFunctionPatterns();
-            this.placeVersionInformation();
+        /**
+         * Form the QR Code matrix.
+         */
+        form: function() {
+            this.setFunctionPatterns();
+            this.setVersionInformation();
             var maskPattern = this.chooseMask();
-            this.placeFormatInformation(maskPattern);
-            this.placeData(QRMask[maskPattern]);
+            this.setFormatInformation(maskPattern);
+            this.setData(QRMask[maskPattern]);
         },
-        placePositionDetectionPatterns: function() {
+        setPositionDetectionPatterns: function() {
             var pos = [{row: 0, col: 0}, {row: this.size - 7, col: 0}, {row: 0, col: this.size - 7}];
             function paint(x, y, size, value, matrix) {
                 for (let i = x; i < x + size; ++i) {
@@ -992,7 +1008,7 @@ var QRCode;
                 paint(row + 2, col + 2, 3, dark, this.matrix);
             }
         },
-        placeTimingPattern: function() {
+        setTimingPattern: function() {
             var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
             var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
             for (var i = 8; i < this.size - 8; ++i) {
@@ -1001,7 +1017,7 @@ var QRCode;
                 }
             }
         },
-        placeAlignmentPattern: function() {
+        setAlignmentPattern: function() {
             var posList = QRAlignmentPatternLocationTable[this.version];
             var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
             var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
@@ -1027,7 +1043,7 @@ var QRCode;
         /**
          * The regions for version information is actually symmetric.
          */
-        placeVersionInformation: function() {
+        setVersionInformation: function() {
             if (this.version < 7) return;
             var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
             var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
@@ -1040,7 +1056,7 @@ var QRCode;
                 }
             }
         },
-        placeFormatInformation: function(maskPattern) {
+        setFormatInformation: function(maskPattern) {
             var dark = QRMatrix.moduleValue[QRMatrix.moduleType.other].dark;
             var light = QRMatrix.moduleValue[QRMatrix.moduleType.other].light;
             var bits = QRErrCorrectionLevelIndicator[this.ecLevel] << 3 | maskPattern;
@@ -1066,8 +1082,8 @@ var QRCode;
      */
     var colorScheme = new Map([
         [QRMatrix.moduleValue[QRMatrix.moduleType.data].dark, '#000000'],[QRMatrix.moduleValue[QRMatrix.moduleType.data].light, '#ffffff'],
-        [QRMatrix.moduleValue[QRMatrix.moduleType.ec].dark, '#ff0000'],[QRMatrix.moduleValue[QRMatrix.moduleType.ec].light, '#ffffff'],
-        [QRMatrix.moduleValue[QRMatrix.moduleType.other].dark, '#00dd00'],[QRMatrix.moduleValue[QRMatrix.moduleType.other].light, '#ffffff'],
+        [QRMatrix.moduleValue[QRMatrix.moduleType.ec].dark, '#000000'],[QRMatrix.moduleValue[QRMatrix.moduleType.ec].light, '#ffffff'],
+        [QRMatrix.moduleValue[QRMatrix.moduleType.other].dark, '#000000'],[QRMatrix.moduleValue[QRMatrix.moduleType.other].light, '#ffffff'],
     ])
 
     function isCanvasSupported() {
@@ -1087,17 +1103,36 @@ var QRCode;
     }
 
     /**
+     * 
+     * @param {HTMLElement} upperElement - Container of the figure.
+     * @param {Object} options - figure's style
+     * @param {number} options.width - width of the figure in pixels
+     * @param {number} options.height - height of the figure in pixels
+     */
+    function QRDrawingPanel(figureSize) {
+        this.figureSize = figureSize;
+        this.container = document.createElement('div');
+        this.container.id = 'qrcode-figure-container';
+        this.container.style.width = figureSize + 'px';
+        this.container.style.height = figureSize + 'px'
+    }
+    QRDrawingPanel.prototype = {
+        clear: function() {
+            if (this.container.firstChild) {
+                this.container.removeChild(this.container.firstChild);
+            }
+        }
+    }
+    /**
      * Create a SVG figure.
      * @param {HTMLElement} upperElement - Container element of the figure.
      * @param {Object} options - Options, with, height, etc.
      */
-    function svgFigure(upperElement, options) {
-        this.upperElement = upperElement;
-        this.options = options;
-        this.svgElement = null;
+    function SVGPanel(figureSize) {
+        QRDrawingPanel.call(this, figureSize);
     }
-    svgFigure.prototype = {
-        figure: function(matrix) {
+    SVGPanel.prototype = {
+        draw: function(matrix) {
             function makeSVG(tag, attrs) {
                 var element = document.createElementNS('http://www.w3.org/2000/svg', tag);
                 for (var k in attrs)
@@ -1105,36 +1140,30 @@ var QRCode;
                 return element;
             }
 
-            this.clear();
-
             var size = matrix.getSize();
-            var svg = makeSVG("svg" , {'viewBox': '1 1 ' + String(size + 2) + " " + String(size + 2), 'width': '100%', 'height': '100%', 'fill': '#000000'});
-            svg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", "http://www.w3.org/1999/xlink");
-            this.upperElement.appendChild(svg);
-            this.svgElement = svg;
+            // hide the refered rect, and make a quiet zone border.
+            var svgElement = makeSVG("svg" , {'viewBox': '1 1 ' + String(size + 2) + " " + String(size + 2), 'width': '100%', 'height': '100%', 'fill': '#000000'});
+            svgElement.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", "http://www.w3.org/1999/xlink");
 
             for (let t in QRMatrix.moduleType) {
                 var darkValue = QRMatrix.moduleValue[QRMatrix.moduleType[t]].dark;
                 var lightValue = QRMatrix.moduleValue[QRMatrix.moduleType[t]].light;
                 var darkColor = colorScheme.get(darkValue);
                 var lightColor = colorScheme.get(lightValue);
-                svg.appendChild(makeSVG("rect", {"fill": darkColor, "width": "1", "height": "1", "id": "template" + darkValue}));
-                svg.appendChild(makeSVG("rect", {"fill": lightColor, "width": "1", "height": "1", "id": "template" + lightValue}));
+                svgElement.appendChild(makeSVG("rect", {"fill": darkColor, "width": "1", "height": "1", "id": "template" + darkValue}));
+                svgElement.appendChild(makeSVG("rect", {"fill": lightColor, "width": "1", "height": "1", "id": "template" + lightValue}));
             }
 
             for (var row = 0; row < size; row++) {
                 for (var col = 0; col < size; col++) {
                     var child = makeSVG("use", {"x": String(col + 2), "y": String(row + 2)});
                     child.setAttributeNS("http://www.w3.org/1999/xlink", "href", "#template" + matrix.getValue(row, col));
-                    svg.appendChild(child);
+                    svgElement.appendChild(child);
                 }
             }
+            this.container.appendChild(svgElement);
+            return this.container;
         },
-        clear: function() {
-            if (this.svgElement != null) {
-                this.upperElement.removeChild(this.svgElement);
-            }
-        }
     }
     
     /**
@@ -1143,35 +1172,27 @@ var QRCode;
      * @param {HTMLElement} upperElement - Container element of the figure.
      * @param {Object} options 
      */
-    var tagFigure = function(upperElement, options) {
-        this.upperElement = upperElement;
-        this.options = options;
+    var TablePanel = function(figureSize) {
+        QRDrawingPanel.call(this, figureSize);
     }
-    tagFigure.prototype = {
-        figure: function(matrix) {
+    TablePanel.prototype = {
+        draw: function(matrix) {
             var size = matrix.getSize();
-            var cellHeight = Math.floor(this.options.height / size);
-            var cellWidth = Math.floor(this.options.width / size);
+            var moduleSize = Math.floor(this.figureSize / size);
+            var padding = this.figureSize % size >> 1;
             var tableTag = ['<table style = "border:0; border-collapse:collapse;">'];
             for (let row = 0; row < size; ++row) {
                 tableTag.push('<tr>');
                 for (let col = 0; col < size; ++col) {
-                    tableTag.push('<td style = "border:0; border-collapse:collapse; padding:0; margin:0; width:' + cellWidth + 'px; height:' + cellHeight + 'px; background-color:' + colorScheme.get(matrix.getValue(row, col)) + ';"></td>');
+                    tableTag.push('<td style = "border:0; border-collapse:collapse; padding:0; margin:0; width:' + moduleSize + 'px; height:' + moduleSize + 'px; background-color:' + colorScheme.get(matrix.getValue(row, col)) + ';"></td>');
                 }
                 tableTag.push('</tr>');
             }
             tableTag.push('</table>');
-            this.upperElement.innerHTML = tableTag.join('');
-
-            // Put the table in the middle of the container.
-            var tableElement = this.upperElement.firstChild;
-            var marginTop = (this.options.height - tableElement.style.offsetHeight) / 2;
-            var marginLeft = (this.options.width - tableElement.style.offsetWidth) / 2;
-            tableElement.style.margin = marginTop + 'px' + ' ' + marginLeft + 'px';
+            this.container.innerHTML = tableTag.join('');
+            this.container.style.padding = padding + 'px';
+            return this.container;
         },
-        clear: function() {
-            this.upperElement.innerHTML = '';
-        }
     }
     /**
      * Use canvas to display the QR Code.
@@ -1179,67 +1200,65 @@ var QRCode;
      * @param {HTMLElement} upperElement - Container element of the figure.
      * @param {Object} options - Options, width, height, etc.
      */
-    var canvasFigure = function (upperElement, options) {
-        this.options = options;
-        this.upperElement = upperElement;
+    var CanvasPanel = function (figureSize) {
+        QRDrawingPanel.call(this, figureSize);
         this.canvasElement = document.createElement("canvas");
-        this.canvasElement.width = options.width;
-        this.canvasElement.height = options.height;
-        upperElement.appendChild(this.canvasElement);
+        this.canvasElement.width = figureSize;
+        this.canvasElement.height = figureSize;
+        this.container.appendChild(this.canvasElement);
         this.canvasContext = this.canvasElement.getContext("2d");
-        this.imgElement = document.createElement("img");
-        this.imgElement.alt = "Scan me!";
-        this.upperElement.appendChild(this.imgElement);
     };
         
     /**
-     * Figure the QRCode.
+     * Figure the QR Code in 1 pixel per module, then transform.
+     * Edges are painted white as quiet zone.
+     * Size of the quiet zone is not fixed. A defect.
      * @param {QRMatrix} matrix
      */
-    canvasFigure.prototype = {
-        figure: function (matrix) {
+    CanvasPanel.prototype = {
+        draw: function (matrix) {
             var size = matrix.getSize();
-            var nWidth = this.options.width / size;
-            var nHeight = this.options.height / size;
-            var nRoundedWidth = Math.round(nWidth);
-            var nRoundedHeight = Math.round(nHeight);
+            var moduleSize = Math.floor(this.figureSize / size);
+            var quietSize = this.figureSize % size >> 1;
 
             this.clear();
-            
+            // save the context before transform.
+            this.canvasContext.save();
+            this.canvasContext.transform(moduleSize, 0, 0, moduleSize, quietSize, quietSize);
+            this.canvasContext.fillStyle = 'white';
+            this.canvasContext.fillRect(0, 0, this.canvasElement.width, this.canvasElement.height);
             for (var row = 0; row < size; row++) {
                 for (var col = 0; col < size; col++) {
-                    var nLeft = col * nWidth;
-                    var nTop = row * nHeight;
-                    this.canvasContext.strokeStyle = colorScheme.get(matrix.getValue(row, col));
-                    this.canvasContext.lineWidth = 1;
                     this.canvasContext.fillStyle = colorScheme.get(matrix.getValue(row, col));
-                    this.canvasContext.fillRect(nLeft, nTop, nWidth, nHeight);
-                    
-                    // 안티 앨리어싱 방지 처리
-                    this.canvasContext.strokeRect(
-                        Math.floor(nLeft) + 0.5,
-                        Math.floor(nTop) + 0.5,
-                        nRoundedWidth,
-                        nRoundedHeight
-                    );
-                    
-                    this.canvasContext.strokeRect(
-                        Math.ceil(nLeft) - 0.5,
-                        Math.ceil(nTop) - 0.5,
-                        nRoundedWidth,
-                        nRoundedHeight
-                    );
+                    this.canvasContext.fillRect(col, row, 1, 1);
                 }
             }
+            // restore the context then draw the quiet zone.
+            this.canvasContext.restore();
+            this.canvasContext.fillStyle = 'white';
+            this.canvasContext.fillRect(0, 0, quietSize, this.canvasElement.height);
+            this.canvasContext.fillRect(0, 0, this.canvasElement.width, quietSize);
+            var androidVersion = checkAndroidVersion();
+            if (androidVersion < 0 || androidVersion >= 3) {
+                this.toImg();
+            }
+            return this.container;
         },
         clear: function() {
             this.canvasContext.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
-            this.imgElement.style.display = 'none';
+            if (this.imgElement) {
+                this.imgElement.style.display = 'none';
+            }
         },
-        makeImage: function() {
-            this.imgElement.src = this.canvasElement.toDataURL('image/png');
-            this.canvasElement.style.display = 'none';
+        toImg: function() {
+            if (!this.imgElement) {
+                this.imgElement = document.createElement("img");
+                this.imgElement.alt = "qrcode";
+                this.canvasElement.style.display = 'none';
+                this.container.appendChild(this.imgElement);
+            }
             this.imgElement.style.display = 'block';
+            this.imgElement.src = this.canvasElement.toDataURL('image/png');
         }
     };
 
@@ -1251,69 +1270,57 @@ var QRCode;
      *
      * @example
      * var qrcode = new QRCode("test", { width : 128, height : 128 });
-     * qrcode.makeCode("https://www.qrcode.com/en/index.html");
+     * qrcode.draw("https://www.qrcode.com/en/index.html");
      * qrcode.clear(); // Clear the QR Code figure.
-     * qrcode.makeCode("code.visualstudio.com", QRCode.ErrorCorrectionLevel.H); // Re-create the QRCode with error correction level.
+     * qrcode.draw("code.visualstudio.com", QRCode.ErrorCorrectionLevel.H); // Re-create the QRCode with error correction level.
      *
      * @param {HTMLElement|String} upperElement - target element or 'id' attribute of the element.
      * @param {Object} options - width and height of the code figure.
      */
     QRCode = function (upperElement, options) {
         this.upperElement = typeof upperElement === 'string' ? document.getElementById(upperElement) : upperElement;
+        if (!(this.upperElement instanceof HTMLElement)) {
+            throw new Error("Can't get the element.");
+        }
         this.options = {
             width : parseInt(upperElement.style.width),
             height : parseInt(upperElement.style.height),
         };
         
-        // Overwrites options
+        // Load options
         if (options) {
-            for (var i in options) {
+            for (let i in options) {
                 this.options[i] = options[i];
             }
         }
 
         this.androidVersion = checkAndroidVersion();
-        this.upperElement = upperElement;
-        this.matrix = null;
-
-        if (isCanvasSupported()) {
-            this.figure = new canvasFigure(this.upperElement, this.options);
+        var squareSize = Math.min(this.options.width, this.options.height);
+        if (this.options.useSVG) {
+            this.panel = new SVGPanel(squareSize);
+        } else if (this.options.useTable || !isCanvasSupported()) {
+            this.panel = new TablePanel(squareSize);
         } else {
-            this.figure = new tagFigure(this.upperElement, this.options);
+            this.panel = new CanvasPanel(squareSize);
         }
     };
     
     /**
      * Figure the QR Code.
-     * 
+     * @param {QRCode.ErrorCorrectionLevel}
      * @param {String} text - The message.
      */
-    QRCode.prototype.makeCode = function (text, ecLevel) {
+    QRCode.prototype.draw = function (text, ecLevel) {
         if (ecLevel == undefined) ecLevel = QRErrorCorrectionLevel.Q;
-        this.matrix = new QRMatrix(text, ecLevel);
-        this.matrix.make();
-        this.upperElement.title = text;
-        this.figure.figure(this.matrix);            
-        this.makeImage();
+        figureContainer = this.panel.draw(new QRMatrix(text, ecLevel));
+        this.upperElement.appendChild(figureContainer);
     };
-    
-    /**
-     * Make the Image from Canvas element
-     * - It occurs automatically
-     * - Android below 3 doesn't support Data-URI spec.
-     * @private
-     */
-    QRCode.prototype.makeImage = function () {
-        if (typeof this.figure.makeImage == "function" && (this.androidVersion < 0 || this.androidVersion >= 3)) {
-            this.figure.makeImage();
-        }
-    };
-    
+
     /**
      * Clear the QRCode figure.
      */
     QRCode.prototype.clear = function () {
-        this.figure.clear();
+        this.panel.clear();
     };
 
     QRCode.ErrorCorrectionLevel = QRErrorCorrectionLevel;

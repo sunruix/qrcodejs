@@ -8,9 +8,9 @@
     <script type="text/javascript" src="qrcode.js"></script>
 </head>
 <body>
-    <input id="text" type="text" autofocus value='https://www.qrcode.com/en/index.html' style="width:50%; height:20px; font-size:large ;" /><br />
-    <label for="ecLevel">容错 Error Correction</label>
-    <select id="ecLevel">
+    <input id="text" type="text" autofocus value='https://www.qrcode.com/en/index.html' style="width:50%; height:20px; font-size:large;" /><br />
+    <label for="ecLevel" style="font-size: large;">容错 Error Correction Rate</label>
+    <select id="ecLevel" style="margin-top: 30px;">
         <option value=0>7%</option>
         <option value=1>15%</option>
         <option value=2>25%</option>
@@ -20,6 +20,7 @@
 
     <script type="text/javascript">
         var qrcode = new QRCode(document.getElementById('qrcode'));
+        // var qrcode = new QRCode(document.getElementById('qrcode'), {useSVG: true});
         function makeCode () {        
             var elText = document.getElementById("text");
             
@@ -28,20 +29,18 @@
                 elText.focus();
                 return;
             }
-            qrcode.makeCode(elText.value, parseInt(document.getElementById('ecLevel').value));
-            // qrcode.makeCode(elText.value, QRCode.ErrorCorrectionLevel.H);
+            qrcode.draw(elText.value, parseInt(document.getElementById('ecLevel').value));
         }
 
         makeCode();
 
-        $("#text").
-            on("blur", function () {
+        $("#text").on("keydown", function (e) {
+            if (e.keyCode == 13) {
                 makeCode();
-            }).
-            on("keydown", function (e) {
-                if (e.keyCode == 13) {
-                    makeCode();
-                }
-            });
+            }
+        });
+        $("#ecLevel").on("change", function () {
+            makeCode();
+        });
     </script>
 </body>
